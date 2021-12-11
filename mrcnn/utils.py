@@ -33,13 +33,14 @@ COCO_MODEL_URL = "https://github.com/matterport/Mask_RCNN/releases/download/v2.0
 
 def extract_bboxes(mask):
     """Compute bounding boxes from masks.
-    mask: [height, width, num_instances]. Mask pixels are either 1 or 0.
+    mask: [num_instances, height, width, num_affordances]. Mask pixels are either 1 or 0.
 
     Returns: bbox array [num_instances, (y1, x1, y2, x2)].
     """
-    boxes = np.zeros([mask.shape[-1], 4], dtype=np.int32)
-    for i in range(mask.shape[-1]):
-        m = mask[:, :, i]
+    # Albert was here
+    boxes = np.zeros([mask.shape[0], 4], dtype=np.int32)
+    for i in range(mask.shape[0]):
+        m = mask[i, :, :, :]
         # Bounding box.
         horizontal_indicies = np.where(np.any(m, axis=0))[0]
         vertical_indicies = np.where(np.any(m, axis=1))[0]
@@ -101,9 +102,11 @@ def compute_overlaps_masks(masks1, masks2):
     """Computes IoU overlaps between two sets of masks.
     masks1, masks2: [Height, Width, instances]
     """
-    
+
     # If either set of masks is empty return empty result
-    if masks1.shape[-1] == 0 or masks2.shape[-1] == 0:
+    #if masks1.shape[-1] == 0 or masks2.shape[-1] == 0:
+    #    return np.zeros((masks1.shape[-1], masks2.shape[-1]))
+    if np.sum(masks1.shape[:,:, 1:]) == 0 or np.sum(masks2.shape[:,:, 1:]) == 0:
         return np.zeros((masks1.shape[-1], masks2.shape[-1]))
     # flatten masks and compute their areas
     masks1 = np.reshape(masks1 > .5, (-1, masks1.shape[-1])).astype(np.float32)
@@ -255,9 +258,27 @@ class Dataset(object):
     def __init__(self, class_map=None):
         self._image_ids = []
         self.image_info = []
+
+        #CHANGE
         # Background is always the first class
-        self.class_info = [{"source": "", "id": 0, "name": "BG"}]
+        #self.class_info = [{"source": "", "id": 0, "name": "BG"}] # outcommented since there should be no background
+        self.class_info = []
+        self.affordance_info = [] # new
         self.source_class_ids = {}
+    
+    def add_affordance(self, source, affordance_id, affordance_name):
+        assert "." not in source, "Source name cannot contain a dot"
+        # Does the class exist already?
+        for info in self.affordance_info:
+            if info['source'] == source and info["id"] == affordance_id:
+                # source.class_id combination already available, skip
+                return
+        # Add the class
+        self.affordance_info.append({
+            "source": source,
+            "id": affordance_id,
+            "name": affordance_name,
+        })
 
     def add_class(self, source, class_id, class_name):
         assert "." not in source, "Source name cannot contain a dot"
@@ -306,10 +327,14 @@ class Dataset(object):
         self.num_classes = len(self.class_info)
         self.class_ids = np.arange(self.num_classes)
         self.class_names = [clean_name(c["name"]) for c in self.class_info]
+        self.num_affordances = len(self.affordance_info)
+        self.affordance_ids = np.arange(self.num_affordances)
+        self.affordances_names = [clean_name(c["name"]) for c in self.affordance_info]
         self.num_images = len(self.image_info)
         self._image_ids = np.arange(self.num_images)
 
         # Mapping from source class and image IDs to internal IDs
+        # ALBERT: Maybe there is something to do here
         self.class_from_source_map = {"{}.{}".format(info['source'], info['id']): id
                                       for info, id in zip(self.class_info, self.class_ids)}
         self.image_from_source_map = {"{}.{}".format(info['source'], info['id']): id
@@ -325,6 +350,7 @@ class Dataset(object):
             for i, info in enumerate(self.class_info):
                 # Include BG class in all datasets
                 if i == 0 or source == info['source']:
+                    # ALBERT: Maybe there is something to do here
                     self.source_class_ids[source].append(i)
 
     def map_source_class_id(self, source_class_id):
@@ -505,10 +531,12 @@ def resize_mask(mask, scale, padding, crop=None):
     # calculated with round() instead of int()
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        mask = scipy.ndimage.zoom(mask, zoom=[scale, scale, 1], order=0)
+        # mask [instance, height, width, affordance]
+        # only scale height and width
+        mask = scipy.ndimage.zoom(mask, zoom=[1, scale, scale, 1], order=0)
     if crop is not None:
         y, x, h, w = crop
-        mask = mask[y:y + h, x:x + w]
+        mask = mask[:, y:y + h, x:x + w]
     else:
         mask = np.pad(mask, padding, mode='constant', constant_values=0)
     return mask
@@ -520,17 +548,17 @@ def minimize_mask(bbox, mask, mini_shape):
 
     See inspect_data.ipynb notebook for more details.
     """
-    mini_mask = np.zeros(mini_shape + (mask.shape[-1],), dtype=bool)
-    for i in range(mask.shape[-1]):
+    mini_mask = np.zeros((mask.shape[0],) + mini_shape + (mask.shape[-1],), dtype=bool)
+    for i in range(mask.shape[0]):
         # Pick slice and cast to bool in case load_mask() returned wrong dtype
-        m = mask[:, :, i].astype(bool)
+        m = mask[i, :, :, :].astype(bool)
         y1, x1, y2, x2 = bbox[i][:4]
         m = m[y1:y2, x1:x2]
         if m.size == 0:
             raise Exception("Invalid bounding box with area of zero")
         # Resize with bilinear interpolation
         m = resize(m, mini_shape)
-        mini_mask[:, :, i] = np.around(m).astype(np.bool)
+        mini_mask[i, :, :, :] = np.around(m).astype(np.bool)
     return mini_mask
 
 
@@ -560,7 +588,8 @@ def mold_mask(mask, config):
 def unmold_mask(mask, bbox, image_shape):
     """Converts a mask generated by the neural network to a format similar
     to its original shape.
-    mask: [height, width] of type float. A small, typically 28x28 mask.
+    original: mask: [height, width] of type float. A small, typically 28x28 mask.
+    new: mask: [height, width, NUM_AFFORDANCES] of type float. A small, typically 28x28 mask.
     bbox: [y1, x1, y2, x2]. The box to fit the mask in.
 
     Returns a binary mask with the same size as the original image.
@@ -568,7 +597,7 @@ def unmold_mask(mask, bbox, image_shape):
     threshold = 0.5
     y1, x1, y2, x2 = bbox
     mask = resize(mask, (y2 - y1, x2 - x1))
-    mask = np.where(mask >= threshold, 1, 0).astype(np.bool)
+    #mask = np.where(mask >= threshold, 1, 0).astype(np.bool)
 
     # Put the mask in the right location.
     full_mask = np.zeros(image_shape[:2], dtype=np.bool)
@@ -668,7 +697,7 @@ def compute_matches(gt_boxes, gt_class_ids, gt_masks,
     # Trim zero padding
     # TODO: cleaner to do zero unpadding upstream
     gt_boxes = trim_zeros(gt_boxes)
-    gt_masks = gt_masks[..., :gt_boxes.shape[0]]
+    gt_masks = gt_masks[:gt_boxes.shape[0], :, :, :]
     pred_boxes = trim_zeros(pred_boxes)
     pred_scores = pred_scores[:pred_boxes.shape[0]]
     # Sort predictions by score from high to low
@@ -676,7 +705,7 @@ def compute_matches(gt_boxes, gt_class_ids, gt_masks,
     pred_boxes = pred_boxes[indices]
     pred_class_ids = pred_class_ids[indices]
     pred_scores = pred_scores[indices]
-    pred_masks = pred_masks[..., indices]
+    pred_masks = pred_masks[indices]
 
     # Compute IoU overlaps [pred_masks, gt_masks]
     overlaps = compute_overlaps_masks(pred_masks, gt_masks)
@@ -757,7 +786,7 @@ def compute_ap_range(gt_box, gt_class_id, gt_mask,
     """Compute AP over a range or IoU thresholds. Default range is 0.5-0.95."""
     # Default is 0.5 to 0.95 with increments of 0.05
     iou_thresholds = iou_thresholds or np.arange(0.5, 1.0, 0.05)
-    
+
     # Compute AP over range of IoU thresholds
     AP = []
     for iou_threshold in iou_thresholds:
