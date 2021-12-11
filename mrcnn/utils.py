@@ -22,6 +22,7 @@ import urllib.request
 import shutil
 import warnings
 from distutils.version import LooseVersion
+import cv2
 
 # URL from which to download the latest COCO trained weights
 COCO_MODEL_URL = "https://github.com/matterport/Mask_RCNN/releases/download/v2.0/mask_rcnn_coco.h5"
@@ -40,8 +41,13 @@ def extract_bboxes(mask):
     # Albert was here
     boxes = np.zeros([mask.shape[0], 4], dtype=np.int32)
     for i in range(mask.shape[0]):
-        m = mask[i, :, :, :]
+        m = mask[i, :, :, 1:]
+        #m_viz = np.zeros((m.shape[0], m.shape[1]))
         # Bounding box.
+        #for i in range(m.shape[-1]):
+        #    m_viz[m[:,:, i] == 1] = 255
+        
+        #cv2.imwrite(os.path.join("mask_gt", str(np.random.randint(10000, size=1)[0]) + ".png"), m_viz)
         horizontal_indicies = np.where(np.any(m, axis=0))[0]
         vertical_indicies = np.where(np.any(m, axis=1))[0]
         if horizontal_indicies.shape[0]:

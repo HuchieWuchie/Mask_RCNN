@@ -22,6 +22,7 @@ import keras.backend as K
 import keras.layers as KL
 import keras.engine as KE
 import keras.models as KM
+import cv2
 
 from mrcnn import utils
 
@@ -1229,6 +1230,26 @@ def load_image_gt(dataset, config, image_id, augment=False, augmentation=None,
     # Load image and mask
     image = dataset.load_image(image_id)
     mask, class_ids = dataset.load_mask(image_id)
+
+    """
+    OBJ_CLASSES = ('bowl', 'tvm', 'pan', 'hammer', 'knife',
+                                    'cup', 'drill', 'racket', 'spatula', 'bottle')
+
+    colors = [(0,0,205), (34,139,34), (192,192,128), (165, 42, 42), (128, 64, 128),
+                (204, 102, 0), (184, 134, 11), (0, 153, 153), (0, 134, 141), (184, 0, 141)]
+    image_viz = np.copy(image)
+    print(mask.shape)
+    for i, class_id in enumerate(class_ids):
+        viz_mask = np.zeros(image_viz.shape).astype(np.uint8)
+        for affordance in range(10):
+            if affordance > 0:
+                viz_mask[mask[i, :, :, affordance] == 1] = (0,0,255)
+
+        image_viz = cv2.addWeighted(image_viz, 1.0, viz_mask, 0.8, 0)
+
+    cv2.imwrite(os.path.join("gt_load", str(image_id) + ".png"), image_viz)
+    print("done")
+    """
     original_shape = image.shape
     image, window, scale, padding, crop = utils.resize_image(
         image,
@@ -1285,7 +1306,7 @@ def load_image_gt(dataset, config, image_id, augment=False, augmentation=None,
     class_ids = class_ids[_idx]
     # Bounding boxes. Note that some boxes might be all zeros
     # if the corresponding mask got cropped out.
-    # bbox: [num_instances, (y1, x1, y2, x2)]
+    # bbox: [num_instances, (y1, x1,    y2, x2)]
     bbox = utils.extract_bboxes(mask)
 
     # Active classes
@@ -1298,7 +1319,6 @@ def load_image_gt(dataset, config, image_id, augment=False, augmentation=None,
     # Resize masks to smaller size to reduce memory usage
     if use_mini_mask:
         mask = utils.minimize_mask(bbox, mask, config.MINI_MASK_SHAPE)
-
     # Image meta data
     image_meta = compose_image_meta(image_id, original_shape, image.shape,
                                     window, scale, active_class_ids)
