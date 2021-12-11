@@ -1904,7 +1904,7 @@ class MaskRCNN():
             else:
                 # Albert, might have to add number of affordance classes
                 input_gt_masks = KL.Input(
-                    shape=[MAX_GT_INSTANCES, config.IMAGE_SHAPE[0], config.IMAGE_SHAPE[1], self.config.NUM_AFFORDANCES],
+                    shape=[config.MAX_GT_INSTANCES, config.IMAGE_SHAPE[0], config.IMAGE_SHAPE[1], self.config.NUM_AFFORDANCES],
                     name="input_gt_masks", dtype=bool)
         elif mode == "inference":
             # Anchors in normalized coordinates
