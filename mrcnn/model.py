@@ -22,7 +22,6 @@ import keras.backend as K
 import keras.layers as KL
 import keras.engine as KE
 import keras.models as KM
-import cv2
 
 from mrcnn import utils
 
