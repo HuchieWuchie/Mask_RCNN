@@ -492,7 +492,8 @@ def detection_targets_graph(proposals, gt_class_ids, gt_boxes, gt_masks, config)
                be zero padded if there are not enough proposals.
     gt_class_ids: [MAX_GT_INSTANCES] int class IDs
     gt_boxes: [MAX_GT_INSTANCES, (y1, x1, y2, x2)] in normalized coordinates.
-    gt_masks: [height, width, MAX_GT_INSTANCES] of boolean type.
+    original: gt_masks: [height, width, MAX_GT_INSTANCES] of boolean type.
+    gt_masks: [MAX_GT_INSTANCES, height, width, NUM_AFFORDANCES] of boolean type.
 
     Returns: Target ROIs and corresponding class IDs, bounding box shifts,
     and masks.
@@ -599,6 +600,12 @@ def detection_targets_graph(proposals, gt_class_ids, gt_boxes, gt_masks, config)
         boxes = tf.concat([y1, x1, y2, x2], 1)
         #boxes = tf.concat(1, [y1, x1, y2, x2])
     box_ids = tf.range(0, tf.shape(roi_masks)[0])
+    resize_shape = [config.NUM_AFFORDANCES]
+    for shape_m in config.MASK_SHAPE:
+        resize_shape.append(shape_m)
+    #masks = tf.image.crop_and_resize(tf.cast(roi_masks, tf.float32), boxes,
+    #                                 box_ids,
+    #                                 (config.NUM_AFFORDANCES,) + config.MASK_SHAPE)
     masks = tf.image.crop_and_resize(tf.cast(roi_masks, tf.float32), boxes,
                                      box_ids,
                                      config.MASK_SHAPE)
@@ -620,7 +627,6 @@ def detection_targets_graph(proposals, gt_class_ids, gt_boxes, gt_masks, config)
     roi_gt_class_ids = tf.pad(roi_gt_class_ids, [(0, N + P)])
     deltas = tf.pad(deltas, [(0, N + P), (0, 0)])
     masks = tf.pad(masks, [[0, N + P], (0, 0), (0, 0), (0,0)]) # Albert added affordance rank, rank now 4 instead of 3
-
     return rois, roi_gt_class_ids, deltas, masks
 
 
@@ -634,7 +640,7 @@ class DetectionTargetLayer(KE.Layer):
     gt_class_ids: [batch, MAX_GT_INSTANCES] Integer class IDs.
     gt_boxes: [batch, MAX_GT_INSTANCES, (y1, x1, y2, x2)] in normalized
               coordinates.
-    gt_masks: [batch, height, width, MAX_GT_INSTANCES] of boolean type
+    gt_masks: [batch, MAX_GT_INSTANCES, height, width, NUM_AFFORDANCES] of boolean type
 
     Returns: Target ROIs and corresponding class IDs, bounding box shifts,
     and masks.
@@ -642,7 +648,7 @@ class DetectionTargetLayer(KE.Layer):
           coordinates
     target_class_ids: [batch, TRAIN_ROIS_PER_IMAGE]. Integer class IDs.
     target_deltas: [batch, TRAIN_ROIS_PER_IMAGE, (dy, dx, log(dh), log(dw)]
-    target_mask: [batch, TRAIN_ROIS_PER_IMAGE, height, width, num_affordances]
+    target_mask: [batch, TRAIN_ROIS_PER_IMAGE, height, width, NUM_AFFORDANCES]
                  Masks cropped to bbox boundaries and resized to neural
                  network output size.
 
@@ -675,8 +681,8 @@ class DetectionTargetLayer(KE.Layer):
             (None, self.config.TRAIN_ROIS_PER_IMAGE, 4),  # rois
             (None, self.config.TRAIN_ROIS_PER_IMAGE),  # class_ids
             (None, self.config.TRAIN_ROIS_PER_IMAGE, 4),  # deltas
-            (None, self.config.TRAIN_ROIS_PER_IMAGE, self.config.MASK_SHAPE[0],
-             self.config.MASK_SHAPE[1], self.config.NUM_AFFORDANCES)  # masks
+            (None, self.config.TRAIN_ROIS_PER_IMAGE, self.config.NUM_AFFORDANCES, self.config.MASK_SHAPE[0],
+             self.config.MASK_SHAPE[1])  # masks
         ]
 
     def compute_mask(self, inputs, mask=None):
@@ -1150,15 +1156,19 @@ def mrcnn_mask_loss_graph(target_masks, target_class_ids, pred_masks):
     # Albert: Update to weighted F-measure
     """Mask binary cross-entropy loss for the masks head.
 
-    target_masks: [batch, num_rois, height, width].
+    original: target_masks: [batch, num_rois, height, width].
+    new: target_masks: [batch, num_rois, height, width].
         A float32 tensor of values 0 or 1. Uses zero padding to fill array.
     target_class_ids: [batch, num_rois]. Integer class IDs. Zero padded.
-    pred_masks: [batch, proposals, height, width, num_classes] float32 tensor
+    original: pred_masks: [batch, proposals, height, width, num_classes] float32 tensor
+                with values from 0 to 1.
+    new: pred_masks: [batch, proposals, height, width, NUM_AFFORDANCES] float32 tensor
                 with values from 0 to 1.
     """
     # Reshape for simplicity. Merge first two dimensions into one.
     target_class_ids = K.reshape(target_class_ids, (-1,))
     mask_shape = tf.shape(target_masks)
+    #target_masks = K.reshape(target_masks, (-1, mask_shape[2], mask_shape[3], mask_shape[4]))
     target_masks = K.reshape(target_masks, (-1, mask_shape[2], mask_shape[3]))
     pred_shape = tf.shape(pred_masks)
     pred_masks = K.reshape(pred_masks,
@@ -1176,6 +1186,8 @@ def mrcnn_mask_loss_graph(target_masks, target_class_ids, pred_masks):
     # Gather the masks (predicted and true) that contribute to loss
     y_true = tf.gather(target_masks, positive_ix)
     y_pred = tf.gather_nd(pred_masks, indices)
+    print("y_true: ", y_true)
+    print("y_pred: ", y_pred)
 
     # Compute binary cross entropy. If no positive ROIs, then return 0.
     # shape: [batch, roi, num_classes]
@@ -1883,10 +1895,10 @@ class MaskRCNN():
             gt_boxes = KL.Lambda(lambda x: norm_boxes_graph(
                 x, K.shape(input_image)[1:3]))(input_gt_boxes)
             # 3. GT Masks (zero padded)
-            # [batch, MAX_GT_INSTANCES, height, width, NUM_AFFORDANCES]
+            # [batch, MAX_GT_INSTANCES, NUM_AFFORDANCES, height, width]
             if config.USE_MINI_MASK:
                 input_gt_masks = KL.Input(
-                    shape=[config.MAX_GT_INSTANCES,  config.MINI_MASK_SHAPE[0],
+                    shape=[config.MAX_GT_INSTANCES, config.MINI_MASK_SHAPE[0],
                            config.MINI_MASK_SHAPE[1], self.config.NUM_AFFORDANCES],
                     name="input_gt_masks", dtype=bool)
             else:
@@ -1999,7 +2011,6 @@ class MaskRCNN():
             rois, target_class_ids, target_bbox, target_mask =\
                 DetectionTargetLayer(config, name="proposal_targets")([
                     target_rois, input_gt_class_ids, gt_boxes, input_gt_masks])
-
 
             # Network Heads
             # TODO: verify that this handles zero padded ROIs
