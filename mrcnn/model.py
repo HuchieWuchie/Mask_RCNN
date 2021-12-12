@@ -994,7 +994,9 @@ def build_fpn_mask_graph(rois, feature_maps, image_meta,
 
     # First deconvolution layer
 
-    x = KL.TimeDistributed(KL.Conv2DTranspose(256, (8, 8), strides=4, activation="relu", padding="same"),
+    #x = KL.TimeDistributed(KL.Conv2DTranspose(256, (8, 8), strides=4, activation="relu", padding="same"),
+    #                       name="mrcnn_mask_deconv1")(x)
+    x = KL.TimeDistributed(KL.Conv2DTranspose(256, (4, 4), strides=2, activation="relu", padding="same"),
                            name="mrcnn_mask_deconv1")(x)
 
     # ---
@@ -1007,7 +1009,9 @@ def build_fpn_mask_graph(rois, feature_maps, image_meta,
 
      # Second deconvolution layer
 
-    x = KL.TimeDistributed(KL.Conv2DTranspose(256, (8, 8), strides=4, activation="relu", padding="same"),
+    #x = KL.TimeDistributed(KL.Conv2DTranspose(256, (8, 8), strides=4, activation="relu", padding="same"),
+    #                       name="mrcnn_mask_deconv2")(x)
+    x = KL.TimeDistributed(KL.Conv2DTranspose(256, (4, 4), strides=2, activation="relu", padding="same"),
                            name="mrcnn_mask_deconv2")(x)
 
     # ---
@@ -1020,7 +1024,7 @@ def build_fpn_mask_graph(rois, feature_maps, image_meta,
 
     # Third deconvolution layer
 
-    x = KL.TimeDistributed(KL.Conv2DTranspose(256, (4, 4), strides=2, activation="relu", padding="same"),
+    x = KL.TimeDistributed(KL.Conv2DTranspose(128, (4, 4), strides=2, activation="relu", padding="same"),
                            name="mrcnn_mask_deconv3")(x)
 
     # ---
@@ -1037,6 +1041,12 @@ def build_fpn_mask_graph(rois, feature_maps, image_meta,
     #                       name="mrcnn_mask")(x)
     x = KL.TimeDistributed(KL.Conv2D(num_affordances, (1, 1), strides=1, activation="softmax"),
                            name="mrcnn_mask")(x)
+    print()
+    print()
+    print("mask layer shape something")
+    print(x)
+    print()
+    print()
     return x
 
 
