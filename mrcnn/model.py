@@ -1199,12 +1199,21 @@ def mrcnn_mask_loss_graph(target_masks, target_class_ids, pred_masks):
                 with values from 0 to 1.
     """
     # Reshape for simplicity. Merge first two dimensions into one.
+    
     mask_shape = tf.shape(target_masks)
-    target_masks = K.reshape(target_masks, (-1, mask_shape[3], mask_shape[4]))
+    target_masks = K.reshape(target_masks, (-1, mask_shape[2], mask_shape[3], mask_shape[4]))
     
     pred_shape = tf.shape(pred_masks)
     pred_masks = K.reshape(pred_masks,
-                           (-1, pred_shape[3], pred_shape[4]))
+                           (-1, pred_shape[2], pred_shape[3], pred_shape[4]))
+    
+    pred_masks = tf.transpose(pred_masks, [0, 3, 1, 2])
+    
+    print("target_mask: ", target_masks)
+    print()
+    print("pred_masks: ", pred_masks)
+    print()
+    print()
 
     y_true = target_masks
     y_pred = pred_masks
