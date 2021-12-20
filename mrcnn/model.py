@@ -1207,7 +1207,7 @@ def mrcnn_mask_loss_graph(target_masks, target_class_ids, pred_masks):
     print()
     print("-------------------")
 
-    pred_masks = tf.transpose(pred_masks, [0, 1, 4, 2, 3])
+    #pred_masks = tf.transpose(pred_masks, [0, 1, 4, 2, 3])
 
     print("********")
     print("target_mask trans: ", target_masks)
