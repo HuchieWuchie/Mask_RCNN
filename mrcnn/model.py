@@ -1225,7 +1225,7 @@ def mrcnn_mask_loss_graph(target_masks, target_class_ids, pred_masks):
     pred_masks = K.reshape(pred_masks,
                            (-1, pred_shape[2], pred_shape[3], pred_shape[4]))
     
-    pred_masks = tf.transpose(pred_masks, [0, 3, 1, 2])
+    #pred_masks = tf.transpose(pred_masks, [0, 3, 1, 2])
     
 
     y_true = target_masks
