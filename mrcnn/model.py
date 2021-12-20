@@ -1037,10 +1037,10 @@ def build_fpn_mask_graph(rois, feature_maps, image_meta,
 
     #x = KL.TimeDistributed(KL.Conv2DTranspose(256, (2, 2), strides=2, activation="relu"),
     #                       name="mrcnn_mask_deconv")(x)
-    #x = KL.TimeDistributed(KL.Conv2D(num_affordances, (1, 1), strides=1, activation="sigmoid"),
-    #                       name="mrcnn_mask")(x)
-    x = KL.TimeDistributed(KL.Conv2D(num_affordances, (1, 1), strides=1, activation="softmax"),
+    x = KL.TimeDistributed(KL.Conv2D(num_affordances, (1, 1), strides=1, activation="sigmoid"),
                            name="mrcnn_mask")(x)
+    #x = KL.TimeDistributed(KL.Conv2D(num_affordances, (1, 1), strides=1, activation="softmax"),
+    #                       name="mrcnn_mask")(x)
     print()
     print()
     print("mask layer shape something")
@@ -1199,33 +1199,33 @@ def mrcnn_mask_loss_graph(target_masks, target_class_ids, pred_masks):
                 with values from 0 to 1.
     """
     # Reshape for simplicity. Merge first two dimensions into one.
-    print("target_masks: ", target_masks, "      pred_masks: ", pred_masks)
+    #print("target_masks: ", target_masks, "      pred_masks: ", pred_masks)
     target_class_ids = K.reshape(target_class_ids, (-1,))
     mask_shape = tf.shape(target_masks)
-    target_masks = K.reshape(target_masks, (-1, mask_shape[2], mask_shape[3], mask_shape[4]))
+    target_masks = K.reshape(target_masks, (-1, mask_shape[3], mask_shape[4]))
     #target_masks = K.reshape(target_masks, (-1, mask_shape[2], mask_shape[3]))
     pred_shape = tf.shape(pred_masks)
     pred_masks = K.reshape(pred_masks,
-                           (-1, pred_shape[2], pred_shape[3], pred_shape[4]))
-    print("RESHAPED: target_masks: ", target_masks, "      pred_masks: ", pred_masks)
+                           (-1, pred_shape[3], pred_shape[4]))
+    #print("RESHAPED: target_masks: ", target_masks, "      pred_masks: ", pred_masks)
     # Permute predicted masks to [N, num_classes, height, width]
     #pred_masks = tf.transpose(pred_masks, [0, 3, 1, 2])
-    print("TRANSPOSED: target_masks: ", target_masks, "      pred_masks: ", pred_masks)
+    #print("TRANSPOSED: target_masks: ", target_masks, "      pred_masks: ", pred_masks)
 
     # Only positive ROIs contribute to the loss. And only
     # the class specific mask of each ROI.
-    positive_ix = tf.where(target_class_ids > 0)[:, 0]
-    positive_class_ids = tf.cast(
-        tf.gather(target_class_ids, positive_ix), tf.int64)
-    indices = tf.stack([positive_ix, positive_class_ids], axis=1)
-    print("indices: ", indices)
+    #positive_ix = tf.where(target_class_ids > 0)[:, 0]
+    #positive_class_ids = tf.cast(
+    #    tf.gather(target_class_ids, positive_ix), tf.int64)
+    #indices = tf.stack([positive_ix, positive_class_ids], axis=1)
+    #print("indices: ", indices)
 
     # Gather the masks (predicted and true) that contribute to loss
-    y_true = tf.gather(target_masks, positive_ix)
+    y_true = target_masks
     #y_pred = tf.gather_nd(pred_masks, indices)
-    y_pred = tf.gather(pred_masks, positive_ix)
+    y_pred = pred_masks
 
-    print("y_true: ", y_true, "   y_pred: ", y_pred)
+    #print("y_true: ", y_true, "   y_pred: ", y_pred)
 
     # Compute binary cross entropy. If no positive ROIs, then return 0.
     # shape: [batch, roi, num_classes]

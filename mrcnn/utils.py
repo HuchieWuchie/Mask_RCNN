@@ -600,7 +600,7 @@ def unmold_mask(mask, bbox, image_shape):
     Returns a binary mask with the same size as the original image.
     """
     #threshold = 0.1
-    threshold = 0.1
+    threshold = 0.25
     y1, x1, y2, x2 = bbox
     mask = resize(mask, (y2 - y1, x2 - x1)) 
     #mask = mask * 255
