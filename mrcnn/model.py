@@ -1190,7 +1190,7 @@ def mrcnn_mask_loss_graph(target_masks, target_class_ids, pred_masks):
     """Mask binary cross-entropy loss for the masks head.
 
     original: target_masks: [batch, num_rois, height, width].
-    new: target_masks: [batch, num_rois, height, width].
+    new: target_masks: [batch, num_rois, NUM_AFFORDANCES, height, width].
         A float32 tensor of values 0 or 1. Uses zero padding to fill array.
     target_class_ids: [batch, num_rois]. Integer class IDs. Zero padded.
     original: pred_masks: [batch, proposals, height, width, num_classes] float32 tensor
@@ -1199,6 +1199,24 @@ def mrcnn_mask_loss_graph(target_masks, target_class_ids, pred_masks):
                 with values from 0 to 1.
     """
     # Reshape for simplicity. Merge first two dimensions into one.
+    print("---------------")
+    print("target_mask input: ", target_masks)
+    print()
+    print("pred_masks input: ", pred_masks)
+    print()
+    print()
+    print("-------------------")
+
+    pred_masks = tf.transpose(pred_masks, [0, 1, 4, 2, 3])
+
+    print("********")
+    print("target_mask trans: ", target_masks)
+    print()
+    print("pred_masks trans: ", pred_masks)
+    print()
+    print()
+    print("********")
+
     
     mask_shape = tf.shape(target_masks)
     target_masks = K.reshape(target_masks, (-1, mask_shape[2], mask_shape[3], mask_shape[4]))
@@ -1209,11 +1227,6 @@ def mrcnn_mask_loss_graph(target_masks, target_class_ids, pred_masks):
     
     pred_masks = tf.transpose(pred_masks, [0, 3, 1, 2])
     
-    print("target_mask: ", target_masks)
-    print()
-    print("pred_masks: ", pred_masks)
-    print()
-    print()
 
     y_true = target_masks
     y_pred = pred_masks
@@ -1225,6 +1238,7 @@ def mrcnn_mask_loss_graph(target_masks, target_class_ids, pred_masks):
                     tf.constant(0.0))
     loss = K.mean(loss)
     return loss
+    
 
 
 ############################################################
