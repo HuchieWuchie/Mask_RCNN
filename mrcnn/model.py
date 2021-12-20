@@ -1239,7 +1239,7 @@ def mrcnn_mask_loss_graph(target_masks, target_class_ids, pred_masks):
     loss = K.switch(tf.size(y_true) > 0,
                     K.categorical_crossentropy(target=y_true, output=y_pred),
                     tf.constant(0.0))
-    #loss = K.mean(loss)
+    loss = K.mean(loss)
     return loss
     
 
